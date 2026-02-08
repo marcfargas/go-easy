@@ -17,8 +17,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { google } from 'googleapis';
-import type { OAuth2Client } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import { AuthError } from './errors.js';
 
 /** Services we can load tokens for */
@@ -98,7 +97,7 @@ export async function getAuth(
   const cached = clientCache.get(cacheKey);
   if (cached) return cached;
 
-  const oauth2 = new google.auth.OAuth2(
+  const oauth2 = new OAuth2Client(
     entry.oauth2.clientId,
     entry.oauth2.clientSecret
   );

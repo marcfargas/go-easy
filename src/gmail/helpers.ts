@@ -5,8 +5,8 @@
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { lookup } from 'node:dns';
-import type { gmail_v1 } from 'googleapis';
-import type { GmailMessage, AttachmentInfo, SendOptions } from './types.js';
+import type { gmail_v1 } from '@googleapis/gmail';
+import type { GmailMessage, AttachmentInfo, SendOptions, BufferAttachment } from './types.js';
 
 /**
  * Extract a header value from a Gmail message payload.
@@ -221,6 +221,108 @@ export async function buildMimeMessage(
   parts.push(`--${altBoundary}--`);
 
   return parts.join('\r\n');
+}
+
+/**
+ * Build a MIME message for forwarding, with in-memory Buffer attachments.
+ *
+ * Similar to buildMimeMessage but accepts BufferAttachment[] instead of file paths.
+ * Builds the forwarded body with quoted original content.
+ */
+export async function buildForwardMime(
+  from: string,
+  to: string,
+  subject: string,
+  userBody: string | undefined,
+  originalBody: { text?: string; html?: string },
+  bufferAttachments: BufferAttachment[],
+  extraHeaders?: Record<string, string>
+): Promise<string> {
+  const boundary = `go-easy-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const hasAttachments = bufferAttachments.length > 0;
+
+  // Build forwarded text body
+  const forwardedText = [
+    ...(userBody ? [userBody, ''] : []),
+    '---------- Forwarded message ----------',
+    ...(originalBody.text ? [originalBody.text] : []),
+  ].join('\r\n');
+
+  // Build forwarded HTML body
+  const forwardedHtml = originalBody.html
+    ? [
+        ...(userBody ? [`<p>${escapeHtml(userBody)}</p>`] : []),
+        '<hr><b>---------- Forwarded message ----------</b><br>',
+        originalBody.html,
+      ].join('\r\n')
+    : undefined;
+
+  let headers = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+  ];
+
+  if (extraHeaders) {
+    for (const [key, value] of Object.entries(extraHeaders)) {
+      headers.push(`${key}: ${value}`);
+    }
+  }
+
+  // No attachments, no HTML — simple text
+  if (!hasAttachments && !forwardedHtml) {
+    headers.push('Content-Type: text/plain; charset=utf-8');
+    return [...headers, '', forwardedText].join('\r\n');
+  }
+
+  // No attachments, with HTML — multipart/alternative
+  if (!hasAttachments && forwardedHtml) {
+    const altBoundary = `alt-${boundary}`;
+    headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    const parts = [...headers, ''];
+    parts.push(`--${altBoundary}`, 'Content-Type: text/plain; charset=utf-8', '', forwardedText);
+    parts.push(`--${altBoundary}`, 'Content-Type: text/html; charset=utf-8', '', forwardedHtml);
+    parts.push(`--${altBoundary}--`);
+    return parts.join('\r\n');
+  }
+
+  // With attachments — multipart/mixed
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+  const parts: string[] = [...headers, '', `--${boundary}`];
+
+  if (forwardedHtml) {
+    const altBoundary = `alt-${boundary}`;
+    parts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`, '');
+    parts.push(`--${altBoundary}`, 'Content-Type: text/plain; charset=utf-8', '', forwardedText);
+    parts.push(`--${altBoundary}`, 'Content-Type: text/html; charset=utf-8', '', forwardedHtml);
+    parts.push(`--${altBoundary}--`);
+  } else {
+    parts.push('Content-Type: text/plain; charset=utf-8', '', forwardedText);
+  }
+
+  // Buffer attachments
+  for (const att of bufferAttachments) {
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${att.mimeType}; name="${att.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${att.filename}"`,
+      '',
+      att.data.toString('base64')
+    );
+  }
+
+  parts.push(`--${boundary}--`);
+  return parts.join('\r\n');
+}
+
+/** Minimal HTML escape for forwarded body text */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** Simple MIME type guessing by extension */

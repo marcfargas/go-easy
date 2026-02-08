@@ -126,6 +126,16 @@ export interface GmailDraft {
   message: GmailMessage;
 }
 
+/** An in-memory attachment (for forwarding, where data comes from API not filesystem) */
+export interface BufferAttachment {
+  /** Original filename */
+  filename: string;
+  /** MIME type */
+  mimeType: string;
+  /** Attachment content */
+  data: Buffer;
+}
+
 /** Result of a write operation */
 export interface WriteResult {
   /** Whether the operation succeeded */

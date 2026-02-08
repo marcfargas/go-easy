@@ -5,11 +5,11 @@
  * Use `getAuth('gmail', 'account@email.com')` from the auth module.
  */
 
-import { google } from 'googleapis';
+import { gmail } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { guardOperation } from '../safety.js';
 import { NotFoundError, QuotaError, GoEasyError } from '../errors.js';
-import { parseMessage, buildMimeMessage, base64UrlEncode, getHeader } from './helpers.js';
+import { parseMessage, buildMimeMessage, buildForwardMime, base64UrlEncode, getHeader } from './helpers.js';
 import type {
   GmailMessage,
   GmailThread,
@@ -21,6 +21,7 @@ import type {
   ReplyOptions,
   ForwardOptions,
   BatchLabelOptions,
+  BufferAttachment,
 } from './types.js';
 
 export type {
@@ -38,7 +39,7 @@ export type {
 
 /** Get a Gmail API client instance */
 function gmailApi(auth: OAuth2Client) {
-  return google.gmail({ version: 'v1', auth });
+  return gmail({ version: 'v1', auth });
 }
 
 /** Wrap Google API errors into our error types */
@@ -268,6 +269,9 @@ export async function reply(
 /**
  * Forward a message to new recipients.
  *
+ * Fetches the original message, quotes its body, re-attaches original
+ * attachments (unless `includeAttachments: false`), and sends.
+ *
  * ⚠️ DESTRUCTIVE — requires safety confirmation.
  */
 export async function forward(
@@ -283,10 +287,53 @@ export async function forward(
     details: { messageId: opts.messageId, to: opts.to },
   });
 
-  // TODO: Implement forwarding with original attachments
-  // This requires fetching the original message, extracting attachments,
-  // and building a new MIME message with them included.
-  throw new GoEasyError('gmail.forward not yet implemented', 'NOT_IMPLEMENTED');
+  const gmail = gmailApi(auth);
+  const from = await getProfile(auth);
+
+  // Fetch original message
+  const original = await getMessage(auth, opts.messageId);
+
+  // Fetch original attachments as Buffers
+  const bufferAttachments: BufferAttachment[] = [];
+  if (opts.includeAttachments !== false && original.attachments.length > 0) {
+    for (const att of original.attachments) {
+      const data = await getAttachmentContent(auth, opts.messageId, att.id);
+      bufferAttachments.push({
+        filename: att.filename,
+        mimeType: att.mimeType,
+        data,
+      });
+    }
+  }
+
+  const subject = original.subject.startsWith('Fwd:')
+    ? original.subject
+    : `Fwd: ${original.subject}`;
+
+  const mime = await buildForwardMime(
+    from,
+    to,
+    subject,
+    opts.body,
+    original.body,
+    bufferAttachments
+  );
+  const raw = base64UrlEncode(mime);
+
+  try {
+    const res = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw },
+    });
+
+    return {
+      ok: true,
+      id: res.data.id ?? '',
+      threadId: res.data.threadId ?? undefined,
+    };
+  } catch (err) {
+    handleApiError(err, 'forward');
+  }
 }
 
 /**

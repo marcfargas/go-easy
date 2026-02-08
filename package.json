@@ -20,7 +20,10 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
   },
   "engines": {
     "node": ">=20"
@@ -35,12 +38,17 @@
   ],
   "author": "Marc Fargas",
   "license": "MIT",
-  "dependencies": {
-    "googleapis": "^144.0.0"
-  },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.5.2",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@googleapis/calendar": "^14.2.0",
+    "@googleapis/drive": "^20.1.0",
+    "@googleapis/gmail": "^16.1.1",
+    "google-auth-library": "^10.5.0"
   }
 }

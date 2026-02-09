@@ -1,6 +1,6 @@
 {
   "name": "@marcfargas/go-easy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Google APIs made easy — Gmail, Drive, Calendar for AI agents and humans",
   "type": "module",
   "exports": {

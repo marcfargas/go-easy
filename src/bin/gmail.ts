@@ -35,7 +35,7 @@ function usage(): never {
     message: 'go-gmail <account> <command> [args...]',
     commands: {
       search: 'go-gmail <account> search "<query>" [--max=N] [--page-token=<token>]',
-      get: 'go-gmail <account> get <messageId> [--format=eml] [--output=<path>] [--b64encode]',
+      get: 'go-gmail <account> get <messageId> [--format=eml|text|html|sane-html] [--output=<path>] [--b64encode]',
       thread: 'go-gmail <account> thread <threadId> [--format=mbox] [--output=<path>] [--b64encode]',
       labels: 'go-gmail <account> labels',
       send: 'go-gmail <account> send --to=<addr> --subject="..." --body-text-file=body.txt [--cc=<addr>] [--bcc=<addr>] [--confirm]',
@@ -99,19 +99,19 @@ function readBodyFlags(flags: Record<string, string>): {
 }
 
 /**
- * Handle raw binary output for --format=eml / --format=mbox.
+ * Handle output for --format=eml / --format=mbox / --format=text / --format=html / --format=sane-html.
  *
  * Three output modes:
- *   --output=<path>   Write bytes to file → JSON { ok, path, bytes }
+ *   --output=<path>   Write bytes to file → JSON { ok, format, path, bytes }
  *   --b64encode       Emit JSON { format, data: "<base64>", bytes } to stdout
- *   (neither)         Write raw bytes directly to stdout (pipe-friendly, non-JSON)
+ *   (neither)         Write content directly to stdout (pipe-friendly, non-JSON)
  *
  * Returns the JSON result object when writing to file or b64, or undefined
- * when writing raw bytes to stdout (caller should not JSON.stringify again).
+ * when writing raw to stdout (caller must not JSON.stringify again).
  */
 function handleRawOutput(
   buf: Buffer,
-  format: 'eml' | 'mbox',
+  format: string,
   flags: Record<string, string>
 ): unknown | undefined {
   const outputPath = flags['output'];
@@ -177,16 +177,31 @@ async function main() {
         });
         break;
 
-      case 'get':
+      case 'get': {
         if (!pos[0]) usage();
-        if (flags.format === 'eml') {
+        const fmt = flags.format;
+        if (fmt === 'eml') {
           const buf = await gmail.getMessageRaw(auth, pos[0]);
           result = handleRawOutput(buf, 'eml', flags);
+          if (result === undefined) return; // already written to stdout
+        } else if (fmt === 'text' || fmt === 'html' || fmt === 'sane-html') {
+          const msg = await gmail.getMessage(auth, pos[0]);
+          let content: string;
+          if (fmt === 'text') {
+            content = msg.body.text ?? '';
+          } else if (fmt === 'html') {
+            content = msg.body.html ?? '';
+          } else {
+            // sane-html: sanitize before output
+            content = gmail.sanitizeEmailHtml(msg.body.html ?? '');
+          }
+          result = handleRawOutput(Buffer.from(content, 'utf-8'), fmt, flags);
           if (result === undefined) return; // already written to stdout
         } else {
           result = await gmail.getMessage(auth, pos[0]);
         }
         break;
+      }
 
       case 'thread':
         if (!pos[0]) usage();

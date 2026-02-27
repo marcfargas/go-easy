@@ -39,6 +39,7 @@ export type {
 };
 
 export { getMessageRaw, getThreadMbox } from './raw.js';
+export { sanitizeEmailHtml } from './formats.js';
 
 export { markdownToHtml } from './markdown.js';
 

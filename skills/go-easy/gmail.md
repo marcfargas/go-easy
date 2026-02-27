@@ -64,24 +64,44 @@ Use `nextPageToken` from a previous response as `--page-token` to fetch the next
 #### get
 Get a single message by ID.
 ```bash
+# Default: structured JSON
 npx go-gmail <account> get <messageId>
 
-# Download raw RFC 2822 message to file
-npx go-gmail <account> get <messageId> --format=eml --output=message.eml
-# → { "ok": true, "format": "eml", "path": "message.eml", "bytes": 4821 }
+# Plain text body only (stdout)
+npx go-gmail <account> get <messageId> --format=text
 
-# Raw bytes to stdout (pipe-friendly, non-JSON)
+# Raw HTML body only (stdout)
+npx go-gmail <account> get <messageId> --format=html
+
+# Sanitized HTML — scripts/events/javascript: URIs stripped, safe to render
+npx go-gmail <account> get <messageId> --format=sane-html
+
+# Raw RFC 2822 message (pipe-friendly)
 npx go-gmail <account> get <messageId> --format=eml > message.eml
 
-# Base64-encoded in JSON (agent-safe, no shell redirection needed)
-npx go-gmail <account> get <messageId> --format=eml --b64encode
-# → { "format": "eml", "data": "<base64>", "bytes": 4821 }
-```
-Returns: `GmailMessage` (default) or raw output (with `--format=eml`)
+# Any format: write to file → JSON { ok, format, path, bytes }
+npx go-gmail <account> get <messageId> --format=sane-html --output=body.html
 
-**Note:** `--format=eml` uses Gmail's `format=raw` API, which reliably returns the
-complete wire-format message including embedded `message/rfc822` attachments and
-nested content that fail with the `attachment` command.
+# Any format: base64 in JSON (agent-safe, no shell redirection)
+npx go-gmail <account> get <messageId> --format=text --b64encode
+# → { "format": "text", "data": "<base64>", "bytes": 1234 }
+```
+
+| `--format` | Output | Source |
+|------------|--------|--------|
+| *(default)* | `GmailMessage` JSON | `getMessage()` |
+| `text` | Plain text body | `body.text` |
+| `html` | Raw HTML body | `body.html` |
+| `sane-html` | Sanitized HTML — XSS-safe | `sanitizeEmailHtml(body.html)` |
+| `eml` | Full RFC 2822 message bytes | `getMessageRaw()` |
+
+**`sane-html` strips:** `<script>`, `<iframe>`, `<object>`, `<form>`, event handlers
+(`onclick`, `onerror`, …), `javascript:` hrefs, `data:` image URIs. Keeps layout,
+tables, `style` attributes, `cid:` images (inline attachments).
+
+**`eml` note:** uses Gmail's `format=raw` API, which reliably returns the complete
+wire-format message including embedded `message/rfc822` attachments that fail with
+the `attachment` command.
 
 #### thread
 Get a full thread (conversation) by ID.
@@ -296,7 +316,7 @@ import { getAuth } from '@marcfargas/go-easy/auth';
 import { search, getMessage, getThread, send, reply, forward,
          createDraft, sendDraft, listDrafts, listLabels,
          batchModifyLabels, getAttachmentContent, getProfile,
-         getMessageRaw, getThreadMbox,
+         getMessageRaw, getThreadMbox, sanitizeEmailHtml,
          markdownToHtml
 } from '@marcfargas/go-easy/gmail';
 import { setSafetyContext } from '@marcfargas/go-easy';

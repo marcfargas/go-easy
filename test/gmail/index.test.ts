@@ -167,6 +167,11 @@ describe('getMessage', () => {
     mockMessagesGet.mockRejectedValue({ code: 429, message: 'Rate limit' });
     await expect(getMessage(fakeAuth, 'msg-1')).rejects.toThrow(QuotaError);
   });
+
+  it('throws GoEasyError for unknown API errors', async () => {
+    mockMessagesGet.mockRejectedValue({ code: 500, message: 'Server error' });
+    await expect(getMessage(fakeAuth, 'msg-1')).rejects.toThrow(GoEasyError);
+  });
 });
 
 describe('getThread', () => {
@@ -682,21 +687,3 @@ describe('getAttachmentContent', () => {
   });
 });
 
-describe('error handling', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('wraps 404 as NotFoundError', async () => {
-    mockMessagesGet.mockRejectedValue({ code: 404, message: 'Not found' });
-    await expect(getMessage(fakeAuth, 'bad')).rejects.toThrow(NotFoundError);
-  });
-
-  it('wraps 429 as QuotaError', async () => {
-    mockMessagesGet.mockRejectedValue({ code: 429, message: 'Quota' });
-    await expect(getMessage(fakeAuth, 'msg')).rejects.toThrow(QuotaError);
-  });
-
-  it('wraps unknown errors as GoEasyError', async () => {
-    mockMessagesGet.mockRejectedValue({ code: 500, message: 'Server error' });
-    await expect(getMessage(fakeAuth, 'msg')).rejects.toThrow(GoEasyError);
-  });
-});

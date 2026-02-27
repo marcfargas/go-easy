@@ -22,10 +22,11 @@
  *   Without --confirm, the command shows what WOULD happen and exits.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { getAuth } from '../auth.js';
 import { setSafetyContext } from '../safety.js';
 import * as gmail from '../gmail/index.js';
+import { parseFlags, readBodyFlags } from './gmail-flags.js';
 
 const args = process.argv.slice(2);
 
@@ -57,45 +58,9 @@ function usage(): never {
   process.exit(1);
 }
 
-/** Parse --key=value flags from args */
-function parseFlags(args: string[]): Record<string, string> {
-  const flags: Record<string, string> = {};
-  for (const arg of args) {
-    const match = arg.match(/^--([^=]+)(?:=(.*))?$/s);
-    if (match) {
-      flags[match[1]] = match[2] ?? 'true';
-    }
-  }
-  return flags;
-}
-
 /** Get positional args (non-flag) */
 function positional(args: string[]): string[] {
   return args.filter((a) => !a.startsWith('--'));
-}
-
-/**
- * Read body content from file flags.
- * Returns { body?, html?, markdown? } for SendOptions.
- */
-function readBodyFlags(flags: Record<string, string>): {
-  body?: string;
-  html?: string;
-  markdown?: string;
-} {
-  const result: { body?: string; html?: string; markdown?: string } = {};
-
-  if (flags['body-text-file']) {
-    result.body = readFileSync(flags['body-text-file'], 'utf-8');
-  }
-  if (flags['body-html-file']) {
-    result.html = readFileSync(flags['body-html-file'], 'utf-8');
-  }
-  if (flags['body-md-file']) {
-    result.markdown = readFileSync(flags['body-md-file'], 'utf-8');
-  }
-
-  return result;
 }
 
 /**
@@ -113,7 +78,7 @@ function handleRawOutput(
   buf: Buffer,
   format: string,
   flags: Record<string, string>
-): unknown | undefined {
+): object | undefined {
   const outputPath = flags['output'];
   const b64encode = 'b64encode' in flags;
 

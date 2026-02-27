@@ -5,12 +5,12 @@
  * Use `getAuth('gmail', 'account@email.com')` from the auth module.
  */
 
-import { gmail } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { guardOperation } from '../safety.js';
-import { NotFoundError, QuotaError, GoEasyError } from '../errors.js';
+import { GoEasyError } from '../errors.js';
 import { parseMessage, buildMimeMessage, buildForwardMime, base64UrlEncode, getHeader } from './helpers.js';
 import { markdownToHtml } from './markdown.js';
+import { gmailApi, handleApiError } from './api.js';
 import type {
   GmailMessage,
   GmailThread,
@@ -58,25 +58,6 @@ function resolveMarkdown<T extends { body?: string; html?: string; markdown?: st
     };
   }
   return opts;
-}
-
-/** Get a Gmail API client instance */
-function gmailApi(auth: OAuth2Client) {
-  return gmail({ version: 'v1', auth });
-}
-
-/** Wrap Google API errors into our error types */
-function handleApiError(err: unknown, context: string): never {
-  if (err instanceof GoEasyError) throw err;
-
-  const gErr = err as { code?: number; message?: string };
-  if (gErr.code === 404) throw new NotFoundError('message', context, err);
-  if (gErr.code === 429) throw new QuotaError('gmail', err);
-  throw new GoEasyError(
-    `Gmail ${context}: ${gErr.message ?? 'Unknown error'}`,
-    'GMAIL_ERROR',
-    err
-  );
 }
 
 /**

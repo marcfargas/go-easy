@@ -4,7 +4,6 @@
 
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { lookup } from 'node:dns';
 import type { gmail_v1 } from '@googleapis/gmail';
 import type { GmailMessage, AttachmentInfo, SendOptions, BufferAttachment } from './types.js';
 
@@ -169,6 +168,26 @@ export function parseMessage(raw: gmail_v1.Schema$Message): GmailMessage {
 }
 
 /**
+ * Serialize a single MIME attachment part.
+ * Used by both buildMimeMessage (file paths → Buffers) and buildForwardMime (Buffers).
+ */
+function serializeMimePart(
+  boundary: string,
+  filename: string,
+  mimeType: string,
+  data: Buffer
+): string[] {
+  return [
+    `--${boundary}`,
+    `Content-Type: ${mimeType}; name="${filename}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${filename}"`,
+    '',
+    data.toString('base64'),
+  ];
+}
+
+/**
  * Build a MIME message string from SendOptions.
  * Supports plain text, HTML multipart, and file attachments.
  */
@@ -241,14 +260,7 @@ export async function buildMimeMessage(
       // Simple MIME type detection
       const mimeType = guessMimeType(filename);
 
-      parts.push(
-        `--${boundary}`,
-        `Content-Type: ${mimeType}; name="${filename}"`,
-        'Content-Transfer-Encoding: base64',
-        `Content-Disposition: attachment; filename="${filename}"`,
-        '',
-        content.toString('base64')
-      );
+      parts.push(...serializeMimePart(boundary, filename, mimeType, content));
     }
 
     parts.push(`--${boundary}--`);
@@ -362,14 +374,7 @@ export async function buildForwardMime(
 
   // Buffer attachments
   for (const att of bufferAttachments) {
-    parts.push(
-      `--${boundary}`,
-      `Content-Type: ${att.mimeType}; name="${att.filename}"`,
-      'Content-Transfer-Encoding: base64',
-      `Content-Disposition: attachment; filename="${att.filename}"`,
-      '',
-      att.data.toString('base64')
-    );
+    parts.push(...serializeMimePart(boundary, att.filename, att.mimeType, att.data));
   }
 
   parts.push(`--${boundary}--`);

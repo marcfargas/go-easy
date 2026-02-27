@@ -50,6 +50,7 @@
   "files": [
     "dist",
     "skills",
+    ".well-known",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

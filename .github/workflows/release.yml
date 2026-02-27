@@ -1,7 +1,9 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -9,13 +11,20 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
+  id-token: write  # Required for npm Trusted Publishing (OIDC)
 
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
+    # Only run when CI passed — not on failures or cancellations
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history needed for changesets to compute version bumps
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -23,12 +32,9 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
       - run: npm run build
 
       - name: Create Release PR or Publish
-        id: changesets
         uses: changesets/action@v1
         with:
           publish: npx changeset publish

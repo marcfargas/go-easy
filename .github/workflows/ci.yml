@@ -2,13 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         node-version: [20, 22, 24]
@@ -21,3 +28,65 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+
+  validate-skill-spec:
+    name: Validate SKILL.md spec
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate SKILL.md files (Agent Skills spec)
+        run: |
+          pip install skills-ref
+          set -e
+          for skill_md in $(find skills -name SKILL.md); do
+            skill_dir=$(dirname "$skill_md")
+            echo "Validating $skill_dir..."
+            agentskills validate "$skill_dir"
+          done
+          echo "All SKILL.md files valid ✅"
+
+  validate-skills-discovery:
+    name: Validate skills discovery
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install skills tooling
+        run: pip install skills-ref
+      - name: Test discovery
+        run: |
+          set -e
+          OUTPUT=$(npx -y skills add skills/go-easy --list 2>&1) || true
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qi "go-easy"; then
+            echo "✅ go-easy skill detected"
+          else
+            echo "❌ go-easy skill NOT detected"
+            exit 1
+          fi
+      - name: Test installation
+        run: |
+          set -e
+          export HOME=$(mktemp -d)
+          mkdir -p "$HOME/.pi/agent"
+          OUTPUT=$(npx -y skills add skills/go-easy --all 2>&1) || {
+            echo "❌ skills add failed:"
+            echo "$OUTPUT"
+            exit 1
+          }
+          echo "$OUTPUT"
+          echo "✅ skills add works"

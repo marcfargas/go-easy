@@ -70,7 +70,7 @@ jobs:
       - name: Test discovery
         run: |
           set -e
-          OUTPUT=$(npx -y skills add skills/go-easy --list 2>&1) || true
+          OUTPUT=$(npx -y skills add ./skills/go-easy --list 2>&1) || true
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -qi "go-easy"; then
             echo "✅ go-easy skill detected"
@@ -83,7 +83,7 @@ jobs:
           set -e
           export HOME=$(mktemp -d)
           mkdir -p "$HOME/.pi/agent"
-          OUTPUT=$(npx -y skills add skills/go-easy --all 2>&1) || {
+          OUTPUT=$(npx -y skills add ./skills/go-easy --all 2>&1) || {
             echo "❌ skills add failed:"
             echo "$OUTPUT"
             exit 1

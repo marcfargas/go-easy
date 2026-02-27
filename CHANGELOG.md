@@ -1,5 +1,38 @@
 # @marcfargas/go-easy
 
+## 0.4.0
+
+### Minor Changes
+
+- [#3](https://github.com/marcfargas/go-easy/pull/3) [`5a516d5`](https://github.com/marcfargas/go-easy/commit/5a516d5bc8662a2ae9ff4b45bc3cac4c0f8b9e99) Thanks [@marcfargas](https://github.com/marcfargas)! - Add `--format=text`, `--format=html`, and `--format=sane-html` to `go-gmail get` — extract message body directly without parsing the full JSON response.
+
+  - `--format=text` — plain text body
+  - `--format=html` — raw HTML body
+  - `--format=sane-html` — HTML with `<script>`, event handlers, `javascript:` hrefs, and `data:` image URIs stripped (safe to render)
+
+  All formats support `--output=<path>` and `--b64encode`, matching the existing `--format=eml` contract.
+
+  New library export: `sanitizeEmailHtml(html)` from `@marcfargas/go-easy/gmail`.
+  New dependency: `sanitize-html`.
+
+- [#3](https://github.com/marcfargas/go-easy/pull/3) [`5a516d5`](https://github.com/marcfargas/go-easy/commit/5a516d5bc8662a2ae9ff4b45bc3cac4c0f8b9e99) Thanks [@marcfargas](https://github.com/marcfargas)! - Add `--format=eml` for `go-gmail get` and `--format=mbox` for `go-gmail thread` — download raw RFC 2822 email or full thread as mbox.
+
+  New output modes work with `--output=<path>` (write to file) and `--b64encode` (base64 JSON, agent-safe), or pipe raw bytes directly to stdout.
+
+  This also fixes retrieval of `message/rfc822` embedded attachments (forwarded .eml files) which previously failed with "Invalid attachment token" — `--format=eml` returns the complete outer message via Gmail's `format=raw` API, bypassing the broken `attachments.get` endpoint.
+
+  New library exports: `getMessageRaw(auth, messageId)`, `getThreadMbox(auth, threadId, fromAddress)`.
+
+### Patch Changes
+
+- [#3](https://github.com/marcfargas/go-easy/pull/3) [`5a516d5`](https://github.com/marcfargas/go-easy/commit/5a516d5bc8662a2ae9ff4b45bc3cac4c0f8b9e99) Thanks [@marcfargas](https://github.com/marcfargas)! - Internal code quality improvements — no behaviour changes.
+
+  - Extract `gmailApi` and `handleApiError` to `src/gmail/api.ts` (eliminates duplication between `index.ts` and `raw.ts`)
+  - Extract `parseFlags` and `readBodyFlags` to `src/bin/gmail-flags.ts` (enables proper test imports)
+  - Extract `serializeMimePart()` MIME helper (eliminates copy-paste between `buildMimeMessage` and `buildForwardMime`)
+  - Remove unused `lookup` import from `helpers.ts`
+  - Fix `handleRawOutput` return type annotation
+
 ## 0.3.1
 
 ### Patch Changes

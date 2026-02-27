@@ -38,6 +38,8 @@ export type {
   BatchLabelOptions,
 };
 
+export { getMessageRaw, getThreadMbox } from './raw.js';
+
 export { markdownToHtml } from './markdown.js';
 
 /**

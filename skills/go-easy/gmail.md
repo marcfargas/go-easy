@@ -65,15 +65,44 @@ Use `nextPageToken` from a previous response as `--page-token` to fetch the next
 Get a single message by ID.
 ```bash
 npx go-gmail <account> get <messageId>
+
+# Download raw RFC 2822 message to file
+npx go-gmail <account> get <messageId> --format=eml --output=message.eml
+# → { "ok": true, "format": "eml", "path": "message.eml", "bytes": 4821 }
+
+# Raw bytes to stdout (pipe-friendly, non-JSON)
+npx go-gmail <account> get <messageId> --format=eml > message.eml
+
+# Base64-encoded in JSON (agent-safe, no shell redirection needed)
+npx go-gmail <account> get <messageId> --format=eml --b64encode
+# → { "format": "eml", "data": "<base64>", "bytes": 4821 }
 ```
-Returns: `GmailMessage`
+Returns: `GmailMessage` (default) or raw output (with `--format=eml`)
+
+**Note:** `--format=eml` uses Gmail's `format=raw` API, which reliably returns the
+complete wire-format message including embedded `message/rfc822` attachments and
+nested content that fail with the `attachment` command.
 
 #### thread
 Get a full thread (conversation) by ID.
 ```bash
 npx go-gmail <account> thread <threadId>
+
+# Download full thread as mbox file
+npx go-gmail <account> thread <threadId> --format=mbox --output=thread.mbox
+# → { "ok": true, "format": "mbox", "path": "thread.mbox", "bytes": 12483 }
+
+# Raw mbox bytes to stdout
+npx go-gmail <account> thread <threadId> --format=mbox > thread.mbox
+
+# Base64-encoded mbox in JSON (agent-safe)
+npx go-gmail <account> thread <threadId> --format=mbox --b64encode
+# → { "format": "mbox", "data": "<base64>", "bytes": 12483 }
 ```
-Returns: `GmailThread` — `{ id, snippet, messages: GmailMessage[] }`
+Returns: `GmailThread` (default) or mbox file (with `--format=mbox`)
+
+The mbox format contains all messages in RFC 2822 format with standard mbox envelope
+lines (`From sender date`). Compatible with Thunderbird, mutt, and any mbox-capable client.
 
 #### labels
 List all labels.
@@ -267,6 +296,7 @@ import { getAuth } from '@marcfargas/go-easy/auth';
 import { search, getMessage, getThread, send, reply, forward,
          createDraft, sendDraft, listDrafts, listLabels,
          batchModifyLabels, getAttachmentContent, getProfile,
+         getMessageRaw, getThreadMbox,
          markdownToHtml
 } from '@marcfargas/go-easy/gmail';
 import { setSafetyContext } from '@marcfargas/go-easy';
@@ -380,6 +410,15 @@ if (drafts.nextPageToken) {
 // Attachments
 const content = await getAttachmentContent(auth, 'msgId', 'attId');
 // content is a Buffer
+
+// Raw RFC 2822 message (works for all messages, including those with
+// embedded message/rfc822 attachments that fail getAttachmentContent)
+const raw: Buffer = await getMessageRaw(auth, 'msgId');
+fs.writeFileSync('message.eml', raw);
+
+// Full thread as mbox (all messages, RFC 2822, with envelope lines)
+const mbox: Buffer = await getThreadMbox(auth, 'threadId', 'me@example.com');
+fs.writeFileSync('thread.mbox', mbox);
 ```
 
 ## Gmail Query Syntax (for search)

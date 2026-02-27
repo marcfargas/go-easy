@@ -22,7 +22,7 @@
  *   Without --confirm, the command shows what WOULD happen and exits.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { getAuth } from '../auth.js';
 import { setSafetyContext } from '../safety.js';
 import * as gmail from '../gmail/index.js';
@@ -35,8 +35,8 @@ function usage(): never {
     message: 'go-gmail <account> <command> [args...]',
     commands: {
       search: 'go-gmail <account> search "<query>" [--max=N] [--page-token=<token>]',
-      get: 'go-gmail <account> get <messageId>',
-      thread: 'go-gmail <account> thread <threadId>',
+      get: 'go-gmail <account> get <messageId> [--format=eml] [--output=<path>] [--b64encode]',
+      thread: 'go-gmail <account> thread <threadId> [--format=mbox] [--output=<path>] [--b64encode]',
       labels: 'go-gmail <account> labels',
       send: 'go-gmail <account> send --to=<addr> --subject="..." --body-text-file=body.txt [--cc=<addr>] [--bcc=<addr>] [--confirm]',
       reply: 'go-gmail <account> reply <messageId> --body-text-file=reply.txt [--reply-all] --confirm',
@@ -98,6 +98,40 @@ function readBodyFlags(flags: Record<string, string>): {
   return result;
 }
 
+/**
+ * Handle raw binary output for --format=eml / --format=mbox.
+ *
+ * Three output modes:
+ *   --output=<path>   Write bytes to file → JSON { ok, path, bytes }
+ *   --b64encode       Emit JSON { format, data: "<base64>", bytes } to stdout
+ *   (neither)         Write raw bytes directly to stdout (pipe-friendly, non-JSON)
+ *
+ * Returns the JSON result object when writing to file or b64, or undefined
+ * when writing raw bytes to stdout (caller should not JSON.stringify again).
+ */
+function handleRawOutput(
+  buf: Buffer,
+  format: 'eml' | 'mbox',
+  flags: Record<string, string>
+): unknown | undefined {
+  const outputPath = flags['output'];
+  const b64encode = 'b64encode' in flags;
+
+  if (outputPath) {
+    writeFileSync(outputPath, buf);
+    return { ok: true, format, path: outputPath, bytes: buf.length };
+  }
+
+  if (b64encode) {
+    return { format, data: buf.toString('base64'), bytes: buf.length };
+  }
+
+  // Raw bytes to stdout — intentionally non-JSON for pipe usage:
+  //   go-gmail <account> get <id> --format=eml > message.eml
+  process.stdout.write(buf);
+  return undefined; // caller must not call JSON.stringify
+}
+
 async function main() {
   if (args.length < 2) usage();
 
@@ -145,12 +179,25 @@ async function main() {
 
       case 'get':
         if (!pos[0]) usage();
-        result = await gmail.getMessage(auth, pos[0]);
+        if (flags.format === 'eml') {
+          const buf = await gmail.getMessageRaw(auth, pos[0]);
+          result = handleRawOutput(buf, 'eml', flags);
+          if (result === undefined) return; // already written to stdout
+        } else {
+          result = await gmail.getMessage(auth, pos[0]);
+        }
         break;
 
       case 'thread':
         if (!pos[0]) usage();
-        result = await gmail.getThread(auth, pos[0]);
+        if (flags.format === 'mbox') {
+          const fromAddress = await gmail.getProfile(auth);
+          const buf = await gmail.getThreadMbox(auth, pos[0], fromAddress);
+          result = handleRawOutput(buf, 'mbox', flags);
+          if (result === undefined) return; // already written to stdout
+        } else {
+          result = await gmail.getThread(auth, pos[0]);
+        }
         break;
 
       case 'labels':
